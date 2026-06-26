@@ -264,7 +264,7 @@ body {
 /* ── Divider ────────────────────────────────────────────────── */
 .divider { height:1px; background:var(--border); margin:16px 0; }
 </style>
-<!--<script src="https://cdn.jsdelivr.net/npm/eruda"></script><script>eruda.init();</script>-->
+<script src="https://cdn.jsdelivr.net/npm/eruda"></script><script>eruda.init();</script>
 </head>
 <body>
 
@@ -385,7 +385,7 @@ function startAuth() {
   renderAuth();
 }
 
-function signIn() {
+function signInOLD() {
   const client = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
@@ -403,6 +403,39 @@ function signIn() {
   });
   client.requestAccessToken({ prompt: 'select_account' });
 }
+
+function signIn() {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: async (resp) => {
+      console.log("Risposta completa di Google:", resp); // <--- AGGIUNGI QUESTO LOG
+      
+      if (resp.error) { toast('Accesso negato: ' + resp.error, 'err'); return; }
+      
+      // Verifica se gli scope richiesti sono effettivamente presenti nel token rilasciato
+      if (!google.accounts.oauth2.hasGrantedAllScopes(resp, SCOPES)) {
+        toast("Attenzione: non hai autorizzato l'uso di Google Sheets!", "err");
+        return;
+      }
+
+      S.token = resp.access_token;
+      sessionStorage.setItem('ms_tok', S.token);
+      
+      try {
+        const u = await gFetch('https://www.googleapis.com/oauth2/v3/userinfo');
+        S.user = { name: u.given_name || u.name || 'Utente', email: u.email };
+        sessionStorage.setItem('ms_usr', JSON.stringify(S.user));
+      } catch(e) { 
+        console.error("Errore durante userinfo:", e);
+        S.user = { name: 'Utente', email:'' }; 
+      }
+      await afterAuth();
+    },
+  });
+  client.requestAccessToken({ prompt: 'select_account' });
+}
+  
 
 function signOut() {
   ['ms_tok','ms_usr','ms_sid'].forEach(k => sessionStorage.removeItem(k));
