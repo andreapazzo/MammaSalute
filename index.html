@@ -315,7 +315,7 @@ body {
 const CLIENT_ID = '515219225709-50f4b06varb5b7ld8q453j6qffevs27l.apps.googleusercontent.com';
 
 const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
-const FILE_NAME = 'MammaSalute – Monitoraggio Gravidanza';
+const FILE_NAME = 'MammaSalute - Monitoraggio Gravidanza';
 const HEADERS   = ['Data','Settimana','Peso (kg)','Sistolica (mmHg)','Diastolica (mmHg)','Note'];
 
 // ── State ───────────────────────────────────────────────────────
@@ -497,7 +497,7 @@ async function findOrCreate() {
           properties:{ pixelSize:130 },
           fields:'pixelSize',
       }},
-    ]}
+    ]})
   });
 }
 
