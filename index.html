@@ -436,7 +436,7 @@ function signInOLD2() {
   client.requestAccessToken({ prompt: 'select_account consent' });
 }
 
-function signIn() {
+function signInOLD3() {
   const client = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file', // Forzati esplicitamente qui
@@ -505,7 +505,7 @@ async function afterAuthOLD() {
   }
 }
 
-async function afterAuth() {
+async function afterAuthOLD2() {
   renderLoading('Connessione a Google Sheets…');
   try {
     console.log("Inizio findOrCreate...");
@@ -619,7 +619,7 @@ async function gFetch(url, opts={}) {
   return res.json();
 }
   
-async function findOrCreate() {
+async function findOrCreateOLD() {
   if (S.sheetId) return;                     // già in sessione
   const sid = sessionStorage.getItem('ms_sid');
   if (sid) { S.sheetId = sid; return; }
@@ -649,6 +649,132 @@ async function findOrCreate() {
   await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A1:F1?valueInputOption=RAW`,
     { method:'PUT', body: JSON.stringify({ values:[HEADERS] }) });
 
+  await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({ requests:[
+      { repeatCell:{
+          range:{ sheetId:0, startRowIndex:0, endRowIndex:1, startColumnIndex:0, endColumnIndex:6 },
+          cell:{ userEnteredFormat:{
+            backgroundColor:{ red:.757, green:.643, blue:.722 },
+            textFormat:{ bold:true, foregroundColor:{ red:1,green:1,blue:1 } },
+            horizontalAlignment:'CENTER',
+          }},
+          fields:'userEnteredFormat',
+      }},
+      { updateSheetProperties:{
+          properties:{ sheetId:0, gridProperties:{ frozenRowCount:1 }},
+          fields:'gridProperties.frozenRowCount',
+      }},
+      { updateDimensionProperties:{
+          range:{ sheetId:0, dimension:'COLUMNS', startIndex:0, endIndex:6 },
+          properties:{ pixelSize:130 },
+          fields:'pixelSize',
+      }},
+    ]})
+  });
+}
+
+function signIn() {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file',
+    callback: async (resp) => {
+      console.log("Risposta Google ricevuta:", resp);
+      
+      if (resp.error) { 
+        toast('Accesso negato: ' + resp.error, 'err'); 
+        return; 
+      }
+
+      // Verifichiamo la presenza del token
+      if (!resp.access_token) {
+        toast('Token non ricevuto da Google', 'err');
+        return;
+      }
+
+      // Salviamo in modo sicuro nello stato globale e nella sessione
+      S.token = resp.access_token;
+      sessionStorage.setItem('ms_tok', S.token);
+      
+      try {
+        const u = await gFetch('https://www.googleapis.com/oauth2/v3/userinfo');
+        S.user = { name: u.given_name || u.name || 'Utente', email: u.email };
+        sessionStorage.setItem('ms_usr', JSON.stringify(S.user));
+      } catch(e) { 
+        console.warn("Userinfo fallito o non critico:", e.message);
+        S.user = { name: 'Utente', email:'' }; 
+      }
+      
+      // Passiamo esplicitamente il token appena ottenuto per blindare la sequenza
+      await afterAuth(resp.access_token);
+    },
+  });
+  
+  client.requestAccessToken({ prompt: 'select_account consent' });
+}
+
+async function afterAuth(forcedToken) {
+  renderLoading('Connessione a Google Sheets…');
+  
+  // Se passiamo un token fresco, assicuriamoci che lo stato globale lo veda subito
+  if (forcedToken) {
+    S.token = forcedToken;
+  }
+
+  try {
+    console.log("Esecuzione findOrCreate con token:", S.token ? S.token.substring(0, 10) + "..." : "VUOTO!");
+    await findOrCreate();
+    
+    console.log("Esecuzione loadData...");
+    await loadData();
+    
+    showNav(true);
+    showSyncBadge(true);
+    
+    if (location.search.includes('action=add')) { go('add'); } else { go('home'); }
+  } catch(e) {
+    console.error("Errore bloccante in afterAuth:", e);
+    toast('Errore sincronizzazione: ' + e.message, 'err');
+    renderAuth();
+  }
+}
+
+async function findOrCreate() {
+  if (S.sheetId) return;
+  const sid = sessionStorage.getItem('ms_sid');
+  if (sid) { S.sheetId = sid; return; }
+
+  // Cerca file esistente
+  const q = encodeURIComponent(`name='${FILE_NAME}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`);
+  
+  console.log("Chiamata Drive API in corso...");
+  const lst = await gFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=1`);
+  console.log("Risposta Drive API ricevuta:", lst);
+
+  if (lst.files?.length) {
+    S.sheetId = lst.files[0].id;
+    sessionStorage.setItem('ms_sid', S.sheetId);
+    await ensureHeaders();
+    return;
+  }
+
+  // Crea nuovo se non esiste
+  console.log("File non trovato. Creazione nuovo foglio di calcolo...");
+  const cr = await gFetch('https://sheets.googleapis.com/v4/spreadsheets', {
+    method: 'POST',
+    body: JSON.stringify({
+      properties: { title: FILE_NAME, locale: 'it_IT' },
+      sheets: [{ properties: { title: 'Rilevamenti', sheetId: 0 } }],
+    }),
+  });
+  S.sheetId = cr.spreadsheetId;
+  sessionStorage.setItem('ms_sid', S.sheetId);
+
+  // Inserimento Header
+  await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A1:F1?valueInputOption=RAW`,
+    { method:'PUT', body: JSON.stringify({ values:[HEADERS] }) });
+
+  // Formattazione
   await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}:batchUpdate`, {
     method: 'POST',
     body: JSON.stringify({ requests:[
