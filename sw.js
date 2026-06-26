@@ -1,10 +1,10 @@
-const CACHE_NAME = 'mammasalute-v1';
+const CACHE_NAME = 'mammasalute-v2'; // <-- Incrementato a v2 per spazzare via il vecchio Hello World
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icons/icon-192x192.png',
-  '/icons/icon-512x512.png',
+  './',
+  'index.html',
+  'manifest.json',
+  'icons/icon-192x192.png',
+  'icons/icon-512x512.png',
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js',
   'https://accounts.google.com/gsi/client',
 ];
@@ -14,10 +14,10 @@ self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache =>
-      // Cache only local assets; external may fail in install
-      cache.addAll(['/', '/index.html', '/manifest.json',
-        '/icons/icon-192x192.png', '/icons/icon-512x512.png'])
-        .catch(() => {})
+      // Rimossi i / iniziali per supportare le sottocartelle di GitHub Pages
+      cache.addAll(['./', 'index.html', 'manifest.json',
+        'icons/icon-192x192.png', 'icons/icon-512x512.png'])
+        .catch((err) => console.error('[SW] Errore installazione cache:', err))
     )
   );
 });
@@ -48,11 +48,14 @@ self.addEventListener('fetch', event => {
     event.respondWith(
       fetch(event.request)
         .then(res => {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+          if (res.status === 200) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+          }
           return res;
         })
-        .catch(() => caches.match('/index.html'))
+        // Corretto anche qui il fallback con percorso relativo
+        .catch(() => caches.match('index.html') || caches.match('./'))
     );
     return;
   }
@@ -62,7 +65,7 @@ self.addEventListener('fetch', event => {
     caches.match(event.request).then(cached => {
       if (cached) return cached;
       return fetch(event.request).then(res => {
-        if (res.ok) {
+        if (res.ok && event.request.method === 'GET') {
           const clone = res.clone();
           caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
         }
@@ -75,7 +78,6 @@ self.addEventListener('fetch', event => {
 // ── Background sync placeholder ───────────────────────────────
 self.addEventListener('sync', event => {
   if (event.tag === 'sync-data') {
-    // Future: sync pending offline entries
     console.log('[SW] Background sync triggered');
   }
 });
