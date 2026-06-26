@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#8D6B84">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MammaSalute">
+<meta name="description" content="Monitora peso e pressione durante la gravidanza con sincronizzazione Google Sheets.">
+
+<title>MammaSalute 🌸</title>
+
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png">
+<link rel="apple-touch-icon" href="icons/icon-192x192.png">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+
+<style>
+/* ── Reset & base ───────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --bg:          #FAF7F4;
+  --card:        #FFFFFF;
+  --mauve:       #C2A4B8;
+  --mauve-dk:    #8D6B84;
+  --sage:        #7EA98B;
+  --sage-dk:     #4E7A5A;
+  --terra:       #D4826A;
+  --terra-dk:    #C4603E;
+  --ink:         #2E2229;
+  --muted:       #9B8B96;
+  --border:      #EDE5E9;
+  --input:       #F5F0F3;
+  --danger:      #D94F4F;
+  --safe-top:    env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html { height: 100%; background: var(--bg); }
+body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  overflow: hidden;
+}
+
+/* ── App shell ──────────────────────────────────────────────── */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+}
+
+/* ── App bar ────────────────────────────────────────────────── */
+#appbar {
+  flex-shrink: 0;
+  padding: calc(var(--safe-top) + 14px) 20px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg);
+  z-index: 10;
+}
+.logo { display: flex; align-items: center; gap: 8px; font-size: 19px; font-weight: 800; color: var(--ink); }
+.logo-icon { font-size: 24px; }
+#sync-badge {
+  display: none;
+  align-items: center;
+  gap: 5px;
+  background: #7EA98B20;
+  color: var(--sage-dk);
+  border-radius: 10px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ── Scrollable content ─────────────────────────────────────── */
+#content {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 0 18px calc(var(--safe-bottom) + 76px);
+}
+
+/* ── Bottom nav ─────────────────────────────────────────────── */
+#bottomnav {
+  display: none;
+  flex-shrink: 0;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  padding-bottom: var(--safe-bottom);
+}
+.nav-row { display: flex; }
+.nav-btn {
+  flex: 1; border: none; background: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 10px 0 8px; color: var(--muted); font-size: 11px; font-weight: 500;
+  transition: color .15s; font-family: inherit;
+}
+.nav-btn.active { color: var(--mauve-dk); font-weight: 700; }
+.nav-btn .ico { font-size: 22px; line-height: 1; }
+
+/* ── Buttons ────────────────────────────────────────────────── */
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; border: none; border-radius: 18px; padding: 16px;
+  font-size: 16px; font-weight: 700; cursor: pointer; font-family: inherit;
+  transition: transform .1s, opacity .1s; letter-spacing: .2px;
+}
+.btn:active { transform: scale(.97); opacity: .9; }
+.btn:disabled { opacity: .45; pointer-events: none; }
+.btn-primary { background: linear-gradient(135deg, var(--terra), var(--terra-dk)); color: #fff; box-shadow: 0 6px 20px #D4826A3A; }
+.btn-ghost   { background: var(--input); color: var(--ink); border-radius: 14px; padding: 12px 16px; font-size: 14px; }
+.btn-danger  { background: #D94F4F18; color: var(--danger); border-radius: 14px; padding: 11px 16px; font-size: 14px; border: 1.5px solid #D94F4F30; }
+
+.google-btn {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  width: 100%; background: #fff; border: 1.5px solid var(--border);
+  border-radius: 16px; padding: 15px 20px; font-size: 15px; font-weight: 600;
+  color: var(--ink); cursor: pointer; box-shadow: 0 2px 10px #0001;
+  font-family: inherit; transition: box-shadow .15s;
+}
+.google-btn:active { box-shadow: none; }
+
+/* ── Cards ──────────────────────────────────────────────────── */
+.card { background: var(--card); border-radius: 20px; padding: 18px; border: 1px solid var(--border); }
+.hero {
+  background: linear-gradient(135deg, var(--mauve) 0%, var(--mauve-dk) 100%);
+  border-radius: 24px; padding: 22px 22px 20px; margin-bottom: 14px;
+  position: relative; overflow: hidden; color: #fff;
+}
+.hero::before { content:''; position:absolute; right:-28px; top:-28px; width:140px; height:140px; border-radius:50%; background:rgba(255,255,255,.07); }
+.hero::after  { content:''; position:absolute; right:36px; bottom:-40px; width:100px; height:100px; border-radius:50%; background:rgba(255,255,255,.05); }
+.hero-sub  { color:rgba(255,255,255,.72); font-size:13px; margin-bottom:3px; }
+.hero-week { color:#fff; font-size:22px; font-weight:800; margin-bottom:12px; }
+
+/* ── Stat pair ──────────────────────────────────────────────── */
+.stat-row { display:flex; gap:12px; margin-bottom:14px; }
+.stat-card { flex:1; background:var(--card); border-radius:18px; padding:14px; border:1px solid var(--border); }
+.stat-lbl  { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; font-weight:600; }
+.stat-val  { font-size:24px; font-weight:800; line-height:1.15; margin:5px 0 2px; }
+.stat-unit { font-size:11px; font-weight:500; color:var(--muted); }
+.stat-sub  { font-size:11px; color:var(--muted); }
+
+/* ── History item ───────────────────────────────────────────── */
+.h-item { display:flex; align-items:center; gap:13px; background:var(--card); border-radius:16px; padding:13px 14px; border:1px solid var(--border); margin-bottom:9px; }
+.date-sq { width:46px; height:46px; border-radius:13px; background:var(--input); display:flex; flex-direction:column; align-items:center; justify-content:center; flex-shrink:0; }
+.date-sq.first { background:linear-gradient(135deg, var(--mauve), var(--mauve-dk)); }
+.date-sq .mo { font-size:10px; line-height:1; color:var(--muted); }
+.date-sq .dy { font-size:19px; font-weight:800; line-height:1.15; color:var(--mauve-dk); }
+.date-sq.first .mo, .date-sq.first .dy { color:#fff; }
+
+/* ── Form ───────────────────────────────────────────────────── */
+.field    { margin-bottom:14px; }
+.f-label  { display:block; font-size:11px; color:var(--muted); font-weight:600; margin-bottom:5px; letter-spacing:.4px; text-transform:uppercase; }
+.f-input  { width:100%; background:var(--input); border:1.5px solid var(--border); border-radius:14px; padding:13px 15px; font-size:16px; color:var(--ink); outline:none; font-family:inherit; transition:border-color .15s; }
+.f-input:focus { border-color:var(--mauve); }
+.f-box         { border-radius:18px; padding:15px; margin-bottom:14px; }
+.f-box.mauve   { background:#C2A4B81A; border:1.5px solid #C2A4B830; }
+.f-box.sage    { background:#7EA98B1A; border:1.5px solid #7EA98B30; }
+.f-box-title   { font-size:13px; font-weight:700; margin-bottom:12px; }
+
+.stepper { display:flex; align-items:center; gap:10px; }
+.stp-btn { width:40px; height:40px; border-radius:12px; border:1.5px solid var(--border); background:var(--input); font-size:22px; cursor:pointer; color:var(--mauve-dk); font-weight:700; display:flex; align-items:center; justify-content:center; user-select:none; }
+.stp-val { flex:1; text-align:center; font-size:19px; font-weight:800; color:var(--ink); }
+
+/* ── Pill ───────────────────────────────────────────────────── */
+.pill { display:inline-block; border-radius:20px; padding:2px 10px; font-size:11px; font-weight:700; }
+
+/* ── Tab switcher ───────────────────────────────────────────── */
+.tabs { display:flex; background:var(--input); border-radius:16px; padding:4px; margin-bottom:18px; }
+.tab-btn { flex:1; padding:10px; border-radius:12px; border:none; background:transparent; color:var(--muted); font-weight:500; font-size:13px; cursor:pointer; transition:all .2s; font-family:inherit; }
+.tab-btn.active { background:var(--card); color:var(--mauve-dk); font-weight:700; box-shadow:0 2px 8px #0001; }
+
+/* ── Chart ──────────────────────────────────────────────────── */
+.chart-card { background:var(--card); border-radius:20px; padding:18px 10px 12px; border:1px solid var(--border); margin-bottom:12px; }
+.chart-ttl  { font-size:13px; font-weight:700; color:var(--muted); margin-bottom:14px; padding-left:8px; }
+.legend     { display:flex; gap:14px; padding-left:8px; margin-top:10px; flex-wrap:wrap; }
+.leg-item   { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--muted); }
+.leg-dot    { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+
+/* ── Summary grid ───────────────────────────────────────────── */
+.sum-grid { display:flex; gap:9px; margin-bottom:12px; }
+.sum-item { flex:1; background:var(--card); border-radius:14px; padding:12px 8px; border:1px solid var(--border); text-align:center; }
+.sum-lbl  { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; margin-bottom:4px; }
+.sum-val  { font-size:15px; font-weight:800; }
+
+/* ── Alert ──────────────────────────────────────────────────── */
+.alert     { border-radius:14px; padding:13px 15px; font-size:13px; margin-bottom:12px; line-height:1.55; }
+.alert.ok  { background:#7EA98B1A; color:var(--sage-dk); border:1px solid #7EA98B30; }
+.alert.bad { background:#D94F4F12; color:var(--danger);  border:1px solid #D94F4F28; }
+.alert.info{ background:#C2A4B818; color:var(--mauve-dk); border:1px solid #C2A4B830; }
+
+/* ── Toast ──────────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: calc(var(--safe-bottom) + 84px); left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: var(--ink); color: #fff; padding: 11px 22px; border-radius: 50px;
+  font-size: 13px; font-weight: 600; opacity: 0; transition: all .3s;
+  z-index: 200; white-space: nowrap; pointer-events: none; max-width: 90vw; text-align: center;
+}
+#toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+#toast.ok   { background:var(--sage-dk); }
+#toast.err  { background:var(--danger); }
+
+/* ── Spinner ────────────────────────────────────────────────── */
+.spin { width:20px; height:20px; border:2.5px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:rot .6s linear infinite; }
+@keyframes rot { to { transform:rotate(360deg); } }
+
+/* ── Auth screen ────────────────────────────────────────────── */
+#auth-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:80vh; padding:24px; text-align:center; }
+.auth-logo { font-size:72px; margin-bottom:16px; }
+.auth-title { font-size:28px; font-weight:800; color:var(--ink); margin-bottom:8px; }
+.auth-sub   { color:var(--muted); font-size:15px; margin-bottom:32px; line-height:1.65; }
+.info-box   { background:var(--input); border-radius:16px; padding:15px 16px; width:100%; text-align:left; }
+.info-box p { font-size:12px; color:var(--muted); line-height:1.75; }
+
+/* ── Loading ────────────────────────────────────────────────── */
+#loading-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:75vh; gap:16px; }
+#loading-wrap .big-spin { width:44px; height:44px; border:3px solid var(--border); border-top-color:var(--mauve-dk); border-radius:50%; animation:rot .7s linear infinite; }
+#loading-wrap p { font-size:14px; color:var(--muted); }
+
+/* ── Empty state ────────────────────────────────────────────── */
+.empty { text-align:center; padding:44px 20px; color:var(--muted); }
+.empty .ei { font-size:52px; margin-bottom:12px; }
+.empty p   { font-size:14px; line-height:1.6; }
+
+/* ── Screen header ──────────────────────────────────────────── */
+.s-header { display:flex; align-items:center; gap:10px; margin-bottom:20px; }
+.back-btn { width:36px; height:36px; border-radius:12px; background:var(--input); border:none; font-size:18px; cursor:pointer; color:var(--ink); display:flex; align-items:center; justify-content:center; }
+.s-title  { font-size:20px; font-weight:800; color:var(--ink); }
+
+/* ── Delete btn ─────────────────────────────────────────────── */
+.del-btn { background:none; border:none; cursor:pointer; color:var(--muted); font-size:18px; padding:6px; margin-left:auto; transition:color .15s; }
+.del-btn:active { color:var(--danger); }
+
+/* ── Install banner ─────────────────────────────────────────── */
+#install-banner {
+  display:none; align-items:center; gap:12px;
+  background:linear-gradient(135deg,var(--mauve),var(--mauve-dk));
+  color:#fff; padding:12px 16px; margin:0 18px 10px; border-radius:16px;
+  cursor:pointer; position:relative;
+}
+#install-banner .ib-icon { font-size:28px; }
+#install-banner .ib-text { flex:1; }
+#install-banner .ib-title { font-size:13px; font-weight:700; }
+#install-banner .ib-sub   { font-size:11px; opacity:.8; }
+#install-banner .ib-close { font-size:18px; opacity:.7; padding:4px; background:none; border:none; color:#fff; cursor:pointer; }
+
+/* ── Scrollbar hide ─────────────────────────────────────────── */
+#content::-webkit-scrollbar { display:none; }
+#content { scrollbar-width:none; }
+
+/* ── Divider ────────────────────────────────────────────────── */
+.divider { height:1px; background:var(--border); margin:16px 0; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- App bar -->
+  <div id="appbar">
+    <div class="logo"><span class="logo-icon">🌸</span><span>MammaSalute</span></div>
+    <div id="sync-badge"><span>📊</span><span id="sync-txt">Sheets ✓</span></div>
+  </div>
+
+  <!-- Install banner (shown when PWA installable) -->
+  <div id="install-banner">
+    <div class="ib-icon">📲</div>
+    <div class="ib-text">
+      <div class="ib-title">Installa l'app</div>
+      <div class="ib-sub">Aggiungi alla schermata home per usarla offline</div>
+    </div>
+    <button class="ib-close" id="install-close">✕</button>
+  </div>
+
+  <!-- Content area -->
+  <div id="content"></div>
+
+  <!-- Bottom nav -->
+  <div id="bottomnav">
+    <div class="nav-row">
+      <button class="nav-btn active" id="nav-home"    onclick="go('home')">    <span class="ico">🏠</span><span>Home</span></button>
+      <button class="nav-btn"        id="nav-charts"  onclick="go('charts')">  <span class="ico">📈</span><span>Grafici</span></button>
+      <button class="nav-btn"        id="nav-history" onclick="go('history')"> <span class="ico">📋</span><span>Storico</span></button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Google Identity Services — caricato dopo il DOM -->
+<script src="https://accounts.google.com/gsi/client" async></script>
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════════
+// CONFIGURAZIONE — inserisci qui il tuo Client ID OAuth
+// Registra l'app su https://console.cloud.google.com una sola
+// volta: tutti gli utenti potranno poi accedere con il proprio
+// account Google senza configurazioni aggiuntive.
+// ═══════════════════════════════════════════════════════════════
+const CLIENT_ID = 'IL_TUO_CLIENT_ID.apps.googleusercontent.com';
+
+const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
+const FILE_NAME = 'MammaSalute – Monitoraggio Gravidanza';
+const HEADERS   = ['Data','Settimana','Peso (kg)','Sistolica (mmHg)','Diastolica (mmHg)','Note'];
+
+// ── State ───────────────────────────────────────────────────────
+const S = {
+  screen: 'auth',
+  user: null,
+  token: null,
+  sheetId: null,
+  data: [],           // [{date,settimana,peso,sistolica,diastolica,note}]
+  chartTab: 'peso',
+  form: freshForm(),
+  saving: false,
+};
+
+let pesoChart = null, presChart = null;
+
+function freshForm() {
+  return { date: isoToday(), settimana: 28, peso:'', sistolica:'', diastolica:'', note:'' };
+}
+
+// ── Utils ───────────────────────────────────────────────────────
+function isoToday() { return new Date().toISOString().split('T')[0]; }
+
+function fmtDate(d) {
+  return new Date(d + 'T00:00:00').toLocaleDateString('it-IT', { day:'2-digit', month:'short', year:'2-digit' });
+}
+function fmtShort(d) {
+  return new Date(d + 'T00:00:00').toLocaleDateString('it-IT', { day:'2-digit', month:'short' });
+}
+function monthStr(d) {
+  return new Date(d + 'T00:00:00').toLocaleDateString('it-IT', { month:'short' });
+}
+function dayNum(d) { return new Date(d + 'T00:00:00').getDate(); }
+
+function toast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + type;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.className='', 2800);
+}
+
+function setNavActive(tab) {
+  ['home','charts','history'].forEach(t => {
+    const b = document.getElementById('nav-'+t);
+    if(b) b.className = 'nav-btn' + (t===tab?' active':'');
+  });
+}
+
+function showNav(v) { document.getElementById('bottomnav').style.display = v?'block':'none'; }
+function showSyncBadge(v) { document.getElementById('sync-badge').style.display = v?'flex':'none'; }
+
+// ── Google Auth ─────────────────────────────────────────────────
+function startAuth() {
+  if (CLIENT_ID.startsWith('IL_TUO')) { renderSetupScreen(); return; }
+  // Ripristina sessione salvata
+  const tok  = sessionStorage.getItem('ms_tok');
+  const user = sessionStorage.getItem('ms_usr');
+  const sid  = sessionStorage.getItem('ms_sid');
+  if (tok) {
+    S.token   = tok;
+    S.user    = user ? JSON.parse(user) : null;
+    S.sheetId = sid || null;
+    afterAuth();
+    return;
+  }
+  renderAuth();
+}
+
+function signIn() {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: async (resp) => {
+      if (resp.error) { toast('Accesso negato: ' + resp.error, 'err'); return; }
+      S.token = resp.access_token;
+      sessionStorage.setItem('ms_tok', S.token);
+      try {
+        const u = await gFetch('https://www.googleapis.com/oauth2/v3/userinfo');
+        S.user = { name: u.given_name || u.name || 'Utente', email: u.email };
+        sessionStorage.setItem('ms_usr', JSON.stringify(S.user));
+      } catch(e) { S.user = { name: 'Utente', email:'' }; }
+      await afterAuth();
+    },
+  });
+  client.requestAccessToken({ prompt: '' });
+}
+
+function signOut() {
+  ['ms_tok','ms_usr','ms_sid'].forEach(k => sessionStorage.removeItem(k));
+  Object.assign(S, { token:null, user:null, sheetId:null, data:[] });
+  showNav(false);
+  showSyncBadge(false);
+  renderAuth();
+}
+
+async function afterAuth() {
+  renderLoading('Connessione a Google Sheets…');
+  try {
+    await findOrCreate();
+    await loadData();
+    showNav(true);
+    showSyncBadge(true);
+    // Shortcut ?action=add
+    if (location.search.includes('action=add')) go('add');
+    else go('home');
+  } catch(e) {
+    toast('Errore: ' + e.message, 'err');
+    renderAuth();
+  }
+}
+
+// ── Google API helpers ──────────────────────────────────────────
+async function gFetch(url, opts={}) {
+  const res = await fetch(url, {
+    ...opts,
+    headers: {
+      'Authorization': 'Bearer ' + S.token,
+      'Content-Type': 'application/json',
+      ...(opts.headers||{}),
+    },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(()=>({}));
+    if (res.status === 401) { toast('Sessione scaduta, riesegui l\'accesso','err'); signOut(); }
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function findOrCreate() {
+  if (S.sheetId) return;                     // già in sessione
+  const sid = sessionStorage.getItem('ms_sid');
+  if (sid) { S.sheetId = sid; return; }
+
+  // Cerca file esistente
+  const q   = encodeURIComponent(`name='${FILE_NAME}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`);
+  const lst = await gFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=1`);
+  if (lst.files?.length) {
+    S.sheetId = lst.files[0].id;
+    sessionStorage.setItem('ms_sid', S.sheetId);
+    await ensureHeaders();
+    return;
+  }
+
+  // Crea nuovo
+  const cr = await gFetch('https://sheets.googleapis.com/v4/spreadsheets', {
+    method: 'POST',
+    body: JSON.stringify({
+      properties: { title: FILE_NAME, locale: 'it_IT' },
+      sheets: [{ properties: { title: 'Rilevamenti', sheetId: 0 } }],
+    }),
+  });
+  S.sheetId = cr.spreadsheetId;
+  sessionStorage.setItem('ms_sid', S.sheetId);
+
+  // Header row + format
+  await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A1:F1?valueInputOption=RAW`,
+    { method:'PUT', body: JSON.stringify({ values:[HEADERS] }) });
+
+  await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({ requests:[
+      { repeatCell:{
+          range:{ sheetId:0, startRowIndex:0, endRowIndex:1, startColumnIndex:0, endColumnIndex:6 },
+          cell:{ userEnteredFormat:{
+            backgroundColor:{ red:.757, green:.643, blue:.722 },
+            textFormat:{ bold:true, foregroundColor:{ red:1,green:1,blue:1 } },
+            horizontalAlignment:'CENTER',
+          }},
+          fields:'userEnteredFormat',
+      }},
+      { updateSheetProperties:{
+          properties:{ sheetId:0, gridProperties:{ frozenRowCount:1 }},
+          fields:'gridProperties.frozenRowCount',
+      }},
+      { updateDimensionProperties:{
+          range:{ sheetId:0, dimension:'COLUMNS', startIndex:0, endIndex:6 },
+          properties:{ pixelSize:130 },
+          fields:'pixelSize',
+      }},
+    ]}
+  });
+}
+
+async function ensureHeaders() {
+  try {
+    const r = await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A1:F1`);
+    if (!r.values?.length) {
+      await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A1:F1?valueInputOption=RAW`,
+        { method:'PUT', body:JSON.stringify({ values:[HEADERS] }) });
+    }
+  } catch(e){}
+}
+
+async function loadData() {
+  const r = await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A2:F2000`);
+  S.data = (r.values || [])
+    .filter(row => row[0] && row[2])
+    .map(row => ({
+      date: row[0], settimana: +row[1]||0,
+      peso: parseFloat(row[2])||0, sistolica: +row[3]||0, diastolica: +row[4]||0,
+      note: row[5]||'',
+    }))
+    .sort((a,b) => a.date.localeCompare(b.date));
+}
+
+async function appendEntry(e) {
+  await gFetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A:F:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { method:'POST', body:JSON.stringify({ values:[[e.date, e.settimana, e.peso, e.sistolica, e.diastolica, e.note]] }) }
+  );
+}
+
+async function deleteEntry(date) {
+  const r = await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A:A`);
+  const rows = r.values||[];
+  const idx  = rows.findIndex((row,i) => i>0 && row[0]===date);
+  if (idx<0) return;
+  await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}:batchUpdate`, {
+    method:'POST',
+    body: JSON.stringify({ requests:[{
+      deleteDimension:{ range:{ sheetId:0, dimension:'ROWS', startIndex:idx, endIndex:idx+1 }}
+    }]}),
+  });
+}
+
+// ── Router ──────────────────────────────────────────────────────
+function go(screen) {
+  S.screen = screen;
+  destroyCharts();
+  if (!['add'].includes(screen)) { showNav(true); setNavActive(screen); }
+  else showNav(false);
+  const render = { home:renderHome, add:renderAdd, charts:renderCharts, history:renderHistory };
+  (render[screen] || renderHome)();
+  document.getElementById('content').scrollTop = 0;
+}
+
+function destroyCharts() {
+  if (pesoChart) { pesoChart.destroy(); pesoChart=null; }
+  if (presChart) { presChart.destroy(); presChart=null; }
+}
+
+// ── Render helpers ───────────────────────────────────────────────
+function html(id, markup) { document.getElementById(id).innerHTML = markup; }
+function q(sel) { return document.querySelector(sel); }
+
+// ── SCREEN: Setup ───────────────────────────────────────────────
+function renderSetupScreen() {
+  showNav(false);
+  html('content', `
+    <div id="auth-wrap">
+      <div class="auth-logo">⚙️</div>
+      <h1 class="auth-title">Configurazione</h1>
+      <p class="auth-sub">Inserisci il tuo <b>Client ID OAuth 2.0</b> di Google Cloud nel codice sorgente (variabile <code>CLIENT_ID</code>) per attivare l'app.</p>
+      <div class="info-box">
+        <p>
+          1. Vai su <b>console.cloud.google.com</b><br>
+          2. Crea un progetto<br>
+          3. Abilita <b>Google Sheets API</b> e <b>Drive API</b><br>
+          4. Credentials → OAuth 2.0 Client ID (tipo Web)<br>
+          5. Aggiungi il dominio dell'app agli <i>Authorized Origins</i><br>
+          6. Copia il Client ID nel file <code>index.html</code>
+        </p>
+      </div>
+    </div>`);
+}
+
+// ── SCREEN: Auth ────────────────────────────────────────────────
+function renderAuth() {
+  showNav(false);
+  html('content', `
+    <div id="auth-wrap">
+      <div class="auth-logo">🌸</div>
+      <h1 class="auth-title">MammaSalute</h1>
+      <p class="auth-sub">Tieni traccia di peso e pressione<br>durante tutta la gravidanza.<br><br>I dati vengono salvati in modo sicuro<br>nel tuo <b>Google Sheets</b> personale.</p>
+      <button class="google-btn" onclick="signIn()" style="margin-bottom:20px">
+        <svg width="20" height="20" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        Accedi con Google
+      </button>
+      <div class="info-box">
+        <p>🔒 Accesso sicuro OAuth 2.0<br>📊 File creato automaticamente nel tuo Drive<br>🚫 Non accediamo ad altri tuoi file</p>
+      </div>
+    </div>`);
+}
+
+// ── SCREEN: Loading ─────────────────────────────────────────────
+function renderLoading(msg) {
+  showNav(false);
+  html('content', `<div id="loading-wrap"><div class="big-spin"></div><p>${msg}</p></div>`);
+}
+
+// ── SCREEN: Home ────────────────────────────────────────────────
+function renderHome() {
+  const d = S.data, n = d.length;
+  const name = S.user?.name || 'Mamma';
+
+  let hero, stats, recent;
+
+  if (n === 0) {
+    hero = `
+      <div class="hero">
+        <div class="hero-sub">Bentornata, ${name} 👋</div>
+        <div class="hero-week">Inizia a monitorare</div>
+        <p style="color:rgba(255,255,255,.65);font-size:13px">Nessun rilevamento ancora. Aggiungi il primo!</p>
+      </div>`;
+    stats = '';
+  } else {
+    const last = d[n-1], prev = n>1?d[n-2]:null;
+    const dP  = prev ? (last.peso - prev.peso).toFixed(1) : null;
+    const dS  = prev ? last.sistolica - prev.sistolica : null;
+    hero = `
+      <div class="hero">
+        <div class="hero-sub">Bentornata, ${name} 👋</div>
+        <div class="hero-week">Settimana ${last.settimana}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+          <span class="pill" style="background:rgba(255,255,255,.2);color:#fff">${last.peso} kg</span>
+          <span class="pill" style="background:rgba(255,255,255,.2);color:#fff">${last.sistolica}/${last.diastolica} mmHg</span>
+        </div>
+        <p style="color:rgba(255,255,255,.6);font-size:12px">Ultimo: ${fmtDate(last.date)}</p>
+      </div>`;
+    stats = `
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="stat-lbl">Peso</div>
+          <div class="stat-val" style="color:var(--mauve-dk)">${last.peso}<span class="stat-unit"> kg</span></div>
+          <div class="stat-sub">${dP!==null?(+dP>0?'+':'')+dP+' kg dalla scorsa':'Primo rilevamento'}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-lbl">Pressione</div>
+          <div class="stat-val" style="color:var(--sage-dk)">${last.sistolica}<span style="font-size:15px;color:var(--muted)">/${last.diastolica}</span><span class="stat-unit"> mmHg</span></div>
+          <div class="stat-sub">${dS!==null?(dS>0?'+':'')+dS+' mmHg sist.':'Primo rilevamento'}</div>
+        </div>
+      </div>`;
+  }
+
+  recent = n===0
+    ? `<div class="empty"><div class="ei">📋</div><p>Aggiungi il primo rilevamento<br>premendo il pulsante qui sopra.</p></div>`
+    : [...d].reverse().slice(0,5).map((r,i) => `
+        <div class="h-item">
+          <div class="date-sq ${i===0?'first':''}">
+            <span class="mo">${monthStr(r.date)}</span>
+            <span class="dy">${dayNum(r.date)}</span>
+          </div>
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:700;color:var(--ink)">${r.peso} kg &nbsp;·&nbsp; <span style="color:var(--sage-dk)">${r.sistolica}/${r.diastolica} mmHg</span></div>
+            <div style="font-size:11px;color:var(--muted)">Settimana ${r.settimana}${r.note?' · '+r.note:''}</div>
+          </div>
+        </div>`).join('');
+
+  html('content', `
+    ${hero}
+    ${stats}
+    <button class="btn btn-primary" onclick="go('add')" style="margin-bottom:16px">+ Nuovo rilevamento</button>
+    <div style="font-size:15px;font-weight:700;margin-bottom:10px">Ultimi rilevamenti</div>
+    ${recent}
+    <div class="divider"></div>
+    <div style="text-align:center">
+      <button onclick="signOut()" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:8px">
+        Disconnetti account
+      </button>
+    </div>`);
+}
+
+// ── SCREEN: Add ─────────────────────────────────────────────────
+function renderAdd() {
+  const f = S.form;
+  html('content', `
+    <div class="s-header">
+      <button class="back-btn" onclick="cancelAdd()">←</button>
+      <span class="s-title">Nuovo rilevamento</span>
+    </div>
+
+    <div class="field">
+      <label class="f-label">Data</label>
+      <input type="date" class="f-input" id="f-date" value="${f.date}">
+    </div>
+
+    <div class="field">
+      <label class="f-label">Settimana di gestazione</label>
+      <div class="stepper">
+        <button class="stp-btn" onclick="adjWeek(-1)">−</button>
+        <span class="stp-val" id="stp-lbl">${f.settimana}ª sett.</span>
+        <button class="stp-btn" onclick="adjWeek(1)">+</button>
+      </div>
+    </div>
+
+    <div class="f-box mauve">
+      <div class="f-box-title" style="color:var(--mauve-dk)">⚖️ Peso corporeo</div>
+      <div class="field" style="margin-bottom:0">
+        <label class="f-label">Peso (kg)</label>
+        <input type="number" inputmode="decimal" step="0.1" class="f-input" id="f-peso" placeholder="es. 65.5" value="${f.peso}">
+      </div>
+    </div>
+
+    <div class="f-box sage">
+      <div class="f-box-title" style="color:var(--sage-dk)">💉 Pressione arteriosa</div>
+      <div class="field">
+        <label class="f-label">Sistolica (mmHg)</label>
+        <input type="number" inputmode="numeric" class="f-input" id="f-sist" placeholder="es. 120" value="${f.sistolica}">
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label class="f-label">Diastolica (mmHg)</label>
+        <input type="number" inputmode="numeric" class="f-input" id="f-dias" placeholder="es. 80" value="${f.diastolica}">
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="f-label">Note (opzionale)</label>
+      <input type="text" class="f-input" id="f-note" placeholder="es. dopo riposo, mattina…" value="${f.note}">
+    </div>
+
+    <button class="btn btn-primary" id="save-btn" onclick="saveEntry()" style="margin-bottom:10px">
+      Salva su Google Sheets
+    </button>
+    <button class="btn btn-ghost" onclick="cancelAdd()">Annulla</button>
+    <div style="height:20px"></div>`);
+}
+
+function adjWeek(d) {
+  S.form.settimana = Math.max(1, Math.min(42, S.form.settimana + d));
+  const el = document.getElementById('stp-lbl');
+  if (el) el.textContent = S.form.settimana + 'ª sett.';
+}
+
+function cancelAdd() {
+  showNav(true);
+  go('home');
+}
+
+async function saveEntry() {
+  if (S.saving) return;
+  const date = document.getElementById('f-date')?.value;
+  const peso = parseFloat(document.getElementById('f-peso')?.value);
+  const sist = parseInt(document.getElementById('f-sist')?.value);
+  const dias = parseInt(document.getElementById('f-dias')?.value);
+  const note = document.getElementById('f-note')?.value?.trim() || '';
+
+  if (!date)        { toast('Inserisci la data','err'); return; }
+  if (!peso||isNaN(peso)) { toast('Inserisci il peso','err'); return; }
+  if (!sist||isNaN(sist)) { toast('Inserisci la sistolica','err'); return; }
+  if (!dias||isNaN(dias)) { toast('Inserisci la diastolica','err'); return; }
+
+  S.saving = true;
+  const btn = document.getElementById('save-btn');
+  if (btn) { btn.disabled=true; btn.innerHTML='<span class="spin"></span>'; }
+
+  try {
+    const entry = { date, settimana: S.form.settimana, peso, sistolica:sist, diastolica:dias, note };
+    await appendEntry(entry);
+    S.data.push(entry);
+    S.data.sort((a,b)=>a.date.localeCompare(b.date));
+    S.form = freshForm();
+    S.form.settimana = Math.min(42, entry.settimana + 1);
+    toast('✓ Salvato su Google Sheets!','ok');
+    showNav(true);
+    go('home');
+  } catch(e) {
+    toast('Errore: ' + e.message,'err');
+    if (btn) { btn.disabled=false; btn.innerHTML='Salva su Google Sheets'; }
+  }
+  S.saving = false;
+}
+
+// ── SCREEN: Charts ──────────────────────────────────────────────
+function renderCharts() {
+  const d = S.data;
+  if (d.length < 2) {
+    html('content', `
+      <div style="font-size:20px;font-weight:800;color:var(--ink);margin-bottom:18px">Andamento</div>
+      <div class="empty"><div class="ei">📈</div><p>Servono almeno 2 rilevamenti<br>per visualizzare i grafici.</p></div>`);
+    return;
+  }
+
+  const labels  = d.map(r=>fmtShort(r.date));
+  const pesoV   = d.map(r=>r.peso);
+  const sistV   = d.map(r=>r.sistolica);
+  const diasV   = d.map(r=>r.diastolica);
+  const last    = d[d.length-1], first = d[0];
+  const dP      = (last.peso - first.peso).toFixed(1);
+  const okPress = last.sistolica < 140 && last.diastolica < 90;
+
+  html('content', `
+    <div style="font-size:20px;font-weight:800;color:var(--ink);margin-bottom:16px">Andamento</div>
+
+    <div class="tabs">
+      <button class="tab-btn ${S.chartTab==='peso'?'active':''}"      onclick="switchTab('peso')">⚖️ Peso</button>
+      <button class="tab-btn ${S.chartTab==='pressione'?'active':''}" onclick="switchTab('pressione')">💉 Pressione</button>
+    </div>
+
+    <div id="section-peso" style="display:${S.chartTab==='peso'?'block':'none'}">
+      <div class="chart-card">
+        <div class="chart-ttl">Andamento peso (kg)</div>
+        <canvas id="c-peso" height="210"></canvas>
+      </div>
+      <div class="sum-grid">
+        <div class="sum-item"><div class="sum-lbl">Inizio</div><div class="sum-val" style="color:var(--mauve-dk)">${first.peso} kg</div></div>
+        <div class="sum-item"><div class="sum-lbl">Attuale</div><div class="sum-val" style="color:var(--mauve-dk)">${last.peso} kg</div></div>
+        <div class="sum-item"><div class="sum-lbl">Variazione</div><div class="sum-val" style="color:var(--terra)">${+dP>0?'+':''}${dP} kg</div></div>
+      </div>
+    </div>
+
+    <div id="section-pressione" style="display:${S.chartTab==='pressione'?'block':'none'}">
+      <div class="chart-card">
+        <div class="chart-ttl">Pressione arteriosa (mmHg)</div>
+        <canvas id="c-press" height="220"></canvas>
+        <div class="legend">
+          <div class="leg-item"><div class="leg-dot" style="background:var(--sage-dk)"></div>Sistolica</div>
+          <div class="leg-item"><div class="leg-dot" style="background:var(--mauve)"></div>Diastolica</div>
+          <div class="leg-item"><div class="leg-dot" style="background:var(--terra);border-radius:2px;width:14px;height:3px"></div>Soglia</div>
+        </div>
+      </div>
+      <div class="alert ${okPress?'ok':'bad'}">
+        ${okPress
+          ? '✓ Pressione attuale '+last.sistolica+'/'+last.diastolica+' mmHg — nei valori normali per la gravidanza.'
+          : '⚠️ Pressione attuale '+last.sistolica+'/'+last.diastolica+' mmHg — supera i valori soglia (140/90). Consulta il tuo medico.'}
+      </div>
+    </div>`);
+
+  if (S.chartTab==='peso')      buildPesoChart(labels, pesoV);
+  else                          buildPressChart(labels, sistV, diasV);
+}
+
+function switchTab(tab) {
+  S.chartTab = tab;
+  destroyCharts();
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>{
+    b.className='tab-btn'+(i===(tab==='peso'?0:1)?' active':'');
+  });
+  document.getElementById('section-peso').style.display      = tab==='peso'?'block':'none';
+  document.getElementById('section-pressione').style.display = tab==='pressione'?'block':'none';
+  const d=S.data;
+  const labels=d.map(r=>fmtShort(r.date));
+  if(tab==='peso') buildPesoChart(labels, d.map(r=>r.peso));
+  else             buildPressChart(labels, d.map(r=>r.sistolica), d.map(r=>r.diastolica));
+}
+
+const chartBase = {
+  responsive: true,
+  plugins: { legend:{ display:false } },
+  scales: {
+    x: { grid:{ color:'#EDE5E9' }, ticks:{ font:{size:10}, color:'#9B8B96', maxRotation:45 } },
+    y: { grid:{ color:'#EDE5E9' }, ticks:{ font:{size:10}, color:'#9B8B96' } },
+  },
+};
+
+function buildPesoChart(labels, vals) {
+  const ctx = document.getElementById('c-peso'); if(!ctx) return;
+  pesoChart = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[{
+      label:'Peso (kg)', data:vals,
+      borderColor:'#8D6B84', backgroundColor:'#8D6B8420',
+      borderWidth:2.5, tension:.35, fill:true,
+      pointBackgroundColor:'#8D6B84', pointBorderColor:'#fff', pointBorderWidth:2, pointRadius:5,
+    }]},
+    options:{ ...chartBase, plugins:{ ...chartBase.plugins, tooltip:{callbacks:{label:c=>c.parsed.y+' kg'}}},
+      scales:{ ...chartBase.scales, y:{ ...chartBase.scales.y, ticks:{...chartBase.scales.y.ticks, callback:v=>v+' kg'}}}},
+  });
+}
+
+function buildPressChart(labels, sist, dias) {
+  const ctx = document.getElementById('c-press'); if(!ctx) return;
+  const blank = new Array(labels.length).fill(null);
+  presChart = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[
+      { label:'Sistolica', data:sist, borderColor:'#4E7A5A', borderWidth:2.5, tension:.35, fill:false,
+        pointBackgroundColor:'#4E7A5A', pointBorderColor:'#fff', pointBorderWidth:2, pointRadius:5 },
+      { label:'Diastolica', data:dias, borderColor:'#C2A4B8', borderWidth:2, borderDash:[5,3], tension:.35, fill:false,
+        pointBackgroundColor:'#C2A4B8', pointBorderColor:'#fff', pointBorderWidth:2, pointRadius:4 },
+      { label:'Soglia sist.', data:new Array(labels.length).fill(140), borderColor:'#D4826A', borderWidth:1.5, borderDash:[4,4], pointRadius:0, fill:false },
+      { label:'Soglia dias.', data:new Array(labels.length).fill(90),  borderColor:'#D4826A88', borderWidth:1, borderDash:[4,4], pointRadius:0, fill:false },
+    ]},
+    options:{ ...chartBase,
+      plugins:{ ...chartBase.plugins, tooltip:{ filter:i=>i.datasetIndex<2, callbacks:{label:c=>c.dataset.label+': '+c.parsed.y+' mmHg'}}},
+      scales:{ ...chartBase.scales, y:{ ...chartBase.scales.y, min:50, max:160 }}},
+  });
+}
+
+// ── SCREEN: History ─────────────────────────────────────────────
+function renderHistory() {
+  const d = [...S.data].reverse();
+  if (!d.length) {
+    html('content', `
+      <div style="font-size:20px;font-weight:800;color:var(--ink);margin-bottom:18px">Storico</div>
+      <div class="empty"><div class="ei">📋</div><p>Nessun rilevamento ancora.<br>Torna in Home per aggiungerne uno.</p></div>`);
+    return;
+  }
+
+  const rows = d.map((r,i)=>`
+    <div class="h-item">
+      <div class="date-sq ${i===0?'first':''}">
+        <span class="mo">${monthStr(r.date)}</span>
+        <span class="dy">${dayNum(r.date)}</span>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:600;color:var(--muted)">Sett. ${r.settimana}</span>
+          ${i===0?'<span class="pill" style="background:#C2A4B820;color:var(--mauve-dk)">Ultimo</span>':''}
+        </div>
+        <div style="font-size:14px;font-weight:700;color:var(--ink)">${r.peso} kg <span style="color:var(--muted);font-weight:400">·</span> <span style="color:var(--sage-dk)">${r.sistolica}/${r.diastolica} mmHg</span></div>
+        ${r.note?`<div style="font-size:11px;color:var(--muted);margin-top:2px">📝 ${r.note}</div>`:''}
+      </div>
+      <button class="del-btn" onclick="askDelete('${r.date}','${fmtDate(r.date)}')">🗑</button>
+    </div>`).join('');
+
+  html('content', `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <span style="font-size:20px;font-weight:800;color:var(--ink)">Storico</span>
+      <span style="font-size:12px;color:var(--muted)">${d.length} rilevamenti</span>
+    </div>
+    <div class="alert info" style="margin-bottom:14px">
+      📊 Dati sincronizzati con Google Sheets. Puoi aprire il file direttamente da Google Drive per esportare o condividere.
+    </div>
+    ${rows}
+    <div style="height:10px"></div>`);
+}
+
+function askDelete(date, label) {
+  if (!confirm(`Eliminare il rilevamento del ${label}?`)) return;
+  doDelete(date);
+}
+
+async function doDelete(date) {
+  toast('Eliminazione…');
+  try {
+    await deleteEntry(date);
+    S.data = S.data.filter(r => r.date !== date);
+    toast('Eliminato','ok');
+    renderHistory();
+  } catch(e) {
+    toast('Errore: ' + e.message,'err');
+  }
+}
+
+// ── Service Worker ───────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then(reg => console.log('[PWA] SW registrato:', reg.scope))
+      .catch(err => console.warn('[PWA] SW fallito:', err));
+  });
+}
+
+// ── PWA Install banner ───────────────────────────────────────────
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const banner = document.getElementById('install-banner');
+  if (banner && !sessionStorage.getItem('ms_install_dismissed')) {
+    banner.style.display = 'flex';
+  }
+});
+document.getElementById('install-banner').addEventListener('click', (e) => {
+  if (e.target.id === 'install-close') {
+    document.getElementById('install-banner').style.display='none';
+    sessionStorage.setItem('ms_install_dismissed','1');
+    return;
+  }
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(c => {
+      if (c.outcome==='accepted') document.getElementById('install-banner').style.display='none';
+      deferredPrompt=null;
+    });
+  }
+});
+
+// ── Boot ────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  let tries = 0;
+  const wait = setInterval(() => {
+    tries++;
+    if (window.google?.accounts?.oauth2 || tries > 40) {
+      clearInterval(wait);
+      startAuth();
+    }
+  }, 150);
+});
+</script>
+</body>
+</html>

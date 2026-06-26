@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="115" fill="#8D6B84"/>
+  <!-- Petali fiore -->
+  <ellipse cx="256" cy="170" rx="38" ry="68" fill="#FAF7F4" opacity="0.92"/>
+  <ellipse cx="256" cy="342" rx="38" ry="68" fill="#FAF7F4" opacity="0.92"/>
+  <ellipse cx="170" cy="256" rx="68" ry="38" fill="#FAF7F4" opacity="0.92"/>
+  <ellipse cx="342" cy="256" rx="68" ry="38" fill="#FAF7F4" opacity="0.92"/>
+  <ellipse cx="197" cy="197" rx="38" ry="68" fill="#FAF7F4" opacity="0.75" transform="rotate(45 197 197)"/>
+  <ellipse cx="315" cy="197" rx="38" ry="68" fill="#FAF7F4" opacity="0.75" transform="rotate(-45 315 197)"/>
+  <ellipse cx="197" cy="315" rx="38" ry="68" fill="#FAF7F4" opacity="0.75" transform="rotate(-45 197 315)"/>
+  <ellipse cx="315" cy="315" rx="38" ry="68" fill="#FAF7F4" opacity="0.75" transform="rotate(45 315 315)"/>
+  <!-- Centro -->
+  <circle cx="256" cy="256" r="62" fill="#C2A4B8"/>
+  <circle cx="256" cy="256" r="44" fill="#FAF7F4"/>
+  <!-- Cuore stilizzato nel centro -->
+  <path d="M256 278 C256 278 228 260 228 244 C228 234 235 228 242 228 C248 228 253 232 256 236 C259 232 264 228 270 228 C277 228 284 234 284 244 C284 260 256 278 256 278Z" fill="#D4826A"/>
+</svg>
