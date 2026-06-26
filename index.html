@@ -404,7 +404,7 @@ function signInOLD() {
   client.requestAccessToken({ prompt: 'select_account' });
 }
 
-function signIn() {
+function signInOLD2() {
   const client = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
@@ -435,7 +435,51 @@ function signIn() {
   });
   client.requestAccessToken({ prompt: 'select_account consent' });
 }
+
+function signIn() {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file', // Forzati esplicitamente qui
+    callback: async (resp) => {
+      console.log("Risposta Google:", resp);
+      
+      if (resp.error) { 
+        toast('Accesso negato: ' + resp.error, 'err'); 
+        return; 
+      }
+
+      // DEBUG: Vediamo cosa ha autorizzato davvero l'utente
+      // Se vedi solo "openid" o "profile", significa che Google sta ignorando la richiesta di Sheets
+      alert("Scope ricevuti: " + resp.scope);
+
+      // Controllo robusto sugli scope
+      const concessoSheets = resp.scope && resp.scope.includes('auth/spreadsheets');
+      const concessoDrive = resp.scope && resp.scope.includes('auth/drive.file');
+
+      if (!concessoSheets || !concessoDrive) {
+        toast("Attenzione: Seleziona TUTTI i checkbox nella schermata di Google per far funzionare l'app!", "err");
+        // Forziamo il riavvio del flusso richiedendo il consenso totale
+        client.requestAccessToken({ prompt: 'consent', select_account: true });
+        return;
+      }
+
+      S.token = resp.access_token;
+      sessionStorage.setItem('ms_tok', S.token);
+      
+      try {
+        const u = await gFetch('https://www.googleapis.com/oauth2/v3/userinfo');
+        S.user = { name: u.given_name || u.name || 'Utente', email: u.email };
+        sessionStorage.setItem('ms_usr', JSON.stringify(S.user));
+      } catch(e) { 
+        S.user = { name: 'Utente', email:'' }; 
+      }
+      await afterAuth();
+    },
+  });
   
+  // Richiediamo esplicitamente l'account e il consenso
+  client.requestAccessToken({ prompt: 'select_account consent' });
+}
 
 function signOut() {
   ['ms_tok','ms_usr','ms_sid'].forEach(k => sessionStorage.removeItem(k));
