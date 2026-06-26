@@ -2,7 +2,8 @@
   "name": "MammaSalute",
   "short_name": "MammaSalute",
   "description": "Monitora peso e pressione durante la gravidanza. Dati sincronizzati su Google Sheets.",
-  "start_url": "/",
+  "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#FAF7F4",
@@ -33,7 +34,7 @@
       "name": "Nuovo rilevamento",
       "short_name": "Aggiungi",
       "description": "Registra peso e pressione",
-      "url": "/?action=add",
+      "url": "./index.html?action=add",
       "icons": [{ "src": "icons/icon-96x96.png", "sizes": "96x96" }]
     }
   ],
