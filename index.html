@@ -523,7 +523,7 @@ async function gFetchOLD(url, opts={}) {
   return res.json();
 }
 
-async function gFetch(url, opts={}) {
+async function gFetchOLD2(url, opts={}) {
   // Pulizia preventiva da spazi o caratteri strani
   const cleanToken = String(S.token).trim();
   
@@ -555,9 +555,48 @@ async function gFetch(url, opts={}) {
     throw new Error(err.error?.message || `HTTP ${res.status}`);
   }
   return res.json();
-  }
-  
+}
 
+async function gFetch(url, opts={}) {
+  const headers = new Headers();
+  
+  // Inseriamo il token pulito senza spazi spuri
+  headers.append('Authorization', 'Bearer ' + String(S.token).trim());
+  headers.append('Content-Type', 'application/json');
+
+  // Se ci sono altri header personalizzati opzionali, li aggiungiamo in sicurezza
+  if (opts.headers) {
+    Object.keys(opts.headers).forEach(k => {
+      if (k.toLowerCase() !== 'authorization' && k.toLowerCase() !== 'content-type') {
+        headers.append(k, opts.headers[k]);
+      }
+    });
+  }
+
+  const res = await fetch(url, {
+    ...opts,
+    headers: headers
+  });
+
+  if (!res.ok) {
+    let errMsg = `HTTP ${res.status}`;
+    try {
+      const errJson = await res.json();
+      errMsg = errJson.error?.message || errMsg;
+    } catch(e) {}
+    
+    // Se c'è un reale problema di autenticazione (es. sessione revocata), puliamo lo stato
+    if (res.status === 401) {
+      ['ms_tok','ms_usr','ms_sid'].forEach(k => sessionStorage.removeItem(k));
+      Object.assign(S, { token:null, user:null, sheetId:null, data:[] });
+    }
+    
+    throw new Error(errMsg);
+  }
+
+  return res.json();
+}
+  
 async function findOrCreate() {
   if (S.sheetId) return;                     // già in sessione
   const sid = sessionStorage.getItem('ms_sid');
