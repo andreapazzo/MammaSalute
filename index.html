@@ -401,7 +401,7 @@ function signIn() {
       await afterAuth();
     },
   });
-  client.requestAccessToken({ prompt: '' });
+  client.requestAccessToken({ prompt: 'select_account' });
 }
 
 function signOut() {
