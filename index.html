@@ -314,7 +314,7 @@ body {
 // ═══════════════════════════════════════════════════════════════
 const CLIENT_ID = '515219225709-50f4b06varb5b7ld8q453j6qffevs27l.apps.googleusercontent.com';
 
-const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
+const SCOPES    = 'openid email profile https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 const FILE_NAME = 'MammaSalute - Monitoraggio Gravidanza';
 const HEADERS   = ['Data','Settimana','Peso (kg)','Sistolica (mmHg)','Diastolica (mmHg)','Note'];
 
@@ -677,7 +677,7 @@ async function findOrCreateOLD() {
 function signIn() {
   const client = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file',
+    scope: 'openid email profile https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file',
     callback: async (resp) => {
       console.log("Risposta Google ricevuta:", resp);
       
