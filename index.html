@@ -264,7 +264,7 @@ body {
 /* ── Divider ────────────────────────────────────────────────── */
 .divider { height:1px; background:var(--border); margin:16px 0; }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/eruda"></script><script>eruda.init();</script>
+<!--<script src="https://cdn.jsdelivr.net/npm/eruda"></script><script>eruda.init();</script>-->
 </head>
 <body>
 
@@ -314,7 +314,7 @@ body {
 // ═══════════════════════════════════════════════════════════════
 const CLIENT_ID = '515219225709-50f4b06varb5b7ld8q453j6qffevs27l.apps.googleusercontent.com';
 
-const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
+const SCOPES    = 'openid email profile https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 const FILE_NAME = 'MammaSalute - Monitoraggio Gravidanza';
 const HEADERS   = ['Data','Settimana','Peso (kg)','Sistolica (mmHg)','Diastolica (mmHg)','Note'];
 
@@ -349,8 +349,6 @@ function monthStr(d) {
   return new Date(d + 'T00:00:00').toLocaleDateString('it-IT', { month:'short' });
 }
 function dayNum(d) { return new Date(d + 'T00:00:00').getDate(); }
-function fmtPeso(v) { return Number(v).toFixed(1).replace('.', ','); }
-function parsePeso(v) { return parseFloat(String(v).replace(',', '.')); }
 
 function toast(msg, type='') {
   const el = document.getElementById('toast');
@@ -387,7 +385,7 @@ function startAuth() {
   renderAuth();
 }
 
-function signIn() {
+function signInOLD() {
   const client = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
@@ -403,7 +401,84 @@ function signIn() {
       await afterAuth();
     },
   });
-  client.requestAccessToken({ prompt: '' });
+  client.requestAccessToken({ prompt: 'select_account' });
+}
+
+function signInOLD2() {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: async (resp) => {
+      console.log("Risposta completa di Google:", resp); // <--- AGGIUNGI QUESTO LOG
+      
+      if (resp.error) { toast('Accesso negato: ' + resp.error, 'err'); return; }
+      
+      // Verifica se gli scope richiesti sono effettivamente presenti nel token rilasciato
+      if (!google.accounts.oauth2.hasGrantedAllScopes(resp, SCOPES)) {
+        toast("Attenzione: non hai autorizzato l'uso di Google Sheets!", "err");
+        return;
+      }
+
+      S.token = resp.access_token;
+      sessionStorage.setItem('ms_tok', S.token);
+      
+      try {
+        const u = await gFetch('https://www.googleapis.com/oauth2/v3/userinfo');
+        S.user = { name: u.given_name || u.name || 'Utente', email: u.email };
+        sessionStorage.setItem('ms_usr', JSON.stringify(S.user));
+      } catch(e) { 
+        console.error("Errore durante userinfo:", e);
+        S.user = { name: 'Utente', email:'' }; 
+      }
+      await afterAuth();
+    },
+  });
+  client.requestAccessToken({ prompt: 'select_account consent' });
+}
+
+function signInOLD3() {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file', // Forzati esplicitamente qui
+    callback: async (resp) => {
+      console.log("Risposta Google:", resp);
+      
+      if (resp.error) { 
+        toast('Accesso negato: ' + resp.error, 'err'); 
+        return; 
+      }
+
+      // DEBUG: Vediamo cosa ha autorizzato davvero l'utente
+      // Se vedi solo "openid" o "profile", significa che Google sta ignorando la richiesta di Sheets
+      alert("Scope ricevuti: " + resp.scope);
+
+      // Controllo robusto sugli scope
+      const concessoSheets = resp.scope && resp.scope.includes('auth/spreadsheets');
+      const concessoDrive = resp.scope && resp.scope.includes('auth/drive.file');
+
+      if (!concessoSheets || !concessoDrive) {
+        toast("Attenzione: Seleziona TUTTI i checkbox nella schermata di Google per far funzionare l'app!", "err");
+        // Forziamo il riavvio del flusso richiedendo il consenso totale
+        client.requestAccessToken({ prompt: 'consent', select_account: true });
+        return;
+      }
+
+      S.token = resp.access_token;
+      sessionStorage.setItem('ms_tok', S.token);
+      
+      try {
+        const u = await gFetch('https://www.googleapis.com/oauth2/v3/userinfo');
+        S.user = { name: u.given_name || u.name || 'Utente', email: u.email };
+        sessionStorage.setItem('ms_usr', JSON.stringify(S.user));
+      } catch(e) { 
+        S.user = { name: 'Utente', email:'' }; 
+      }
+      await afterAuth();
+    },
+  });
+  
+  // Richiediamo esplicitamente l'account e il consenso
+  client.requestAccessToken({ prompt: 'select_account consent' });
 }
 
 function signOut() {
@@ -414,7 +489,7 @@ function signOut() {
   renderAuth();
 }
 
-async function afterAuth() {
+async function afterAuthOLD() {
   renderLoading('Connessione a Google Sheets…');
   try {
     await findOrCreate();
@@ -430,8 +505,30 @@ async function afterAuth() {
   }
 }
 
+async function afterAuthOLD2() {
+  renderLoading('Connessione a Google Sheets…');
+  try {
+    console.log("Inizio findOrCreate...");
+    await findOrCreate();
+    
+    console.log("Inizio loadData...");
+    await loadData();
+    
+    showNav(true);
+    showSyncBadge(true);
+    
+    // Sintassi corretta e sicura su una riga sola
+    if (location.search.includes('action=add')) { go('add'); } else { go('home'); }
+
+  } catch(e) {
+    console.error("Errore bloccante in afterAuth:", e);
+    toast('Errore sincronizzazione: ' + e.message, 'err');
+    renderAuth();
+  }
+}
+
 // ── Google API helpers ──────────────────────────────────────────
-async function gFetch(url, opts={}) {
+async function gFetchOLD(url, opts={}) {
   const res = await fetch(url, {
     ...opts,
     headers: {
@@ -448,7 +545,81 @@ async function gFetch(url, opts={}) {
   return res.json();
 }
 
-async function findOrCreate() {
+async function gFetchOLD2(url, opts={}) {
+  // Pulizia preventiva da spazi o caratteri strani
+  const cleanToken = String(S.token).trim();
+  
+  const headers = new Headers();
+  headers.append('Authorization', 'Bearer ' + cleanToken);
+  headers.append('Content-Type', 'application/json');
+  
+  // Se ci sono altri header personalizzati, li aggiungiamo senza sovrascrivere Authorization
+  if (opts.headers) {
+    Object.keys(opts.headers).forEach(k => {
+      if (k.toLowerCase() !== 'authorization') {
+        headers.append(k, opts.headers[k]);
+      }
+    });
+  }
+
+  const res = await fetch(url, {
+    ...opts,
+    headers: headers
+  });
+  
+  if (!res.ok) {
+    const err = await res.json().catch(()=>({}));
+    if (res.status === 401) { 
+      // Se fallisce subito, svuota la sessione corrotta
+      ['ms_tok','ms_usr','ms_sid'].forEach(k => sessionStorage.removeItem(k));
+      Object.assign(S, { token:null, user:null, sheetId:null, data:[] });
+    }
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function gFetch(url, opts={}) {
+  const headers = new Headers();
+  
+  // Inseriamo il token pulito senza spazi spuri
+  headers.append('Authorization', 'Bearer ' + String(S.token).trim());
+  headers.append('Content-Type', 'application/json');
+
+  // Se ci sono altri header personalizzati opzionali, li aggiungiamo in sicurezza
+  if (opts.headers) {
+    Object.keys(opts.headers).forEach(k => {
+      if (k.toLowerCase() !== 'authorization' && k.toLowerCase() !== 'content-type') {
+        headers.append(k, opts.headers[k]);
+      }
+    });
+  }
+
+  const res = await fetch(url, {
+    ...opts,
+    headers: headers
+  });
+
+  if (!res.ok) {
+    let errMsg = `HTTP ${res.status}`;
+    try {
+      const errJson = await res.json();
+      errMsg = errJson.error?.message || errMsg;
+    } catch(e) {}
+    
+    // Se c'è un reale problema di autenticazione (es. sessione revocata), puliamo lo stato
+    if (res.status === 401) {
+      ['ms_tok','ms_usr','ms_sid'].forEach(k => sessionStorage.removeItem(k));
+      Object.assign(S, { token:null, user:null, sheetId:null, data:[] });
+    }
+    
+    throw new Error(errMsg);
+  }
+
+  return res.json();
+}
+  
+async function findOrCreateOLD() {
   if (S.sheetId) return;                     // già in sessione
   const sid = sessionStorage.getItem('ms_sid');
   if (sid) { S.sheetId = sid; return; }
@@ -478,6 +649,132 @@ async function findOrCreate() {
   await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A1:F1?valueInputOption=RAW`,
     { method:'PUT', body: JSON.stringify({ values:[HEADERS] }) });
 
+  await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({ requests:[
+      { repeatCell:{
+          range:{ sheetId:0, startRowIndex:0, endRowIndex:1, startColumnIndex:0, endColumnIndex:6 },
+          cell:{ userEnteredFormat:{
+            backgroundColor:{ red:.757, green:.643, blue:.722 },
+            textFormat:{ bold:true, foregroundColor:{ red:1,green:1,blue:1 } },
+            horizontalAlignment:'CENTER',
+          }},
+          fields:'userEnteredFormat',
+      }},
+      { updateSheetProperties:{
+          properties:{ sheetId:0, gridProperties:{ frozenRowCount:1 }},
+          fields:'gridProperties.frozenRowCount',
+      }},
+      { updateDimensionProperties:{
+          range:{ sheetId:0, dimension:'COLUMNS', startIndex:0, endIndex:6 },
+          properties:{ pixelSize:130 },
+          fields:'pixelSize',
+      }},
+    ]})
+  });
+}
+
+function signIn() {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: 'openid email profile https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file',
+    callback: async (resp) => {
+      console.log("Risposta Google ricevuta:", resp);
+      
+      if (resp.error) { 
+        toast('Accesso negato: ' + resp.error, 'err'); 
+        return; 
+      }
+
+      // Verifichiamo la presenza del token
+      if (!resp.access_token) {
+        toast('Token non ricevuto da Google', 'err');
+        return;
+      }
+
+      // Salviamo in modo sicuro nello stato globale e nella sessione
+      S.token = resp.access_token;
+      sessionStorage.setItem('ms_tok', S.token);
+      
+      try {
+        const u = await gFetch('https://www.googleapis.com/oauth2/v3/userinfo');
+        S.user = { name: u.given_name || u.name || 'Utente', email: u.email };
+        sessionStorage.setItem('ms_usr', JSON.stringify(S.user));
+      } catch(e) { 
+        console.warn("Userinfo fallito o non critico:", e.message);
+        S.user = { name: 'Utente', email:'' }; 
+      }
+      
+      // Passiamo esplicitamente il token appena ottenuto per blindare la sequenza
+      await afterAuth(resp.access_token);
+    },
+  });
+  
+  client.requestAccessToken({ prompt: 'select_account consent' });
+}
+
+async function afterAuth(forcedToken) {
+  renderLoading('Connessione a Google Sheets…');
+  
+  // Se passiamo un token fresco, assicuriamoci che lo stato globale lo veda subito
+  if (forcedToken) {
+    S.token = forcedToken;
+  }
+
+  try {
+    console.log("Esecuzione findOrCreate con token:", S.token ? S.token.substring(0, 10) + "..." : "VUOTO!");
+    await findOrCreate();
+    
+    console.log("Esecuzione loadData...");
+    await loadData();
+    
+    showNav(true);
+    showSyncBadge(true);
+    
+    if (location.search.includes('action=add')) { go('add'); } else { go('home'); }
+  } catch(e) {
+    console.error("Errore bloccante in afterAuth:", e);
+    toast('Errore sincronizzazione: ' + e.message, 'err');
+    renderAuth();
+  }
+}
+
+async function findOrCreate() {
+  if (S.sheetId) return;
+  const sid = sessionStorage.getItem('ms_sid');
+  if (sid) { S.sheetId = sid; return; }
+
+  // Cerca file esistente
+  const q = encodeURIComponent(`name='${FILE_NAME}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`);
+  
+  console.log("Chiamata Drive API in corso...");
+  const lst = await gFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=1`);
+  console.log("Risposta Drive API ricevuta:", lst);
+
+  if (lst.files?.length) {
+    S.sheetId = lst.files[0].id;
+    sessionStorage.setItem('ms_sid', S.sheetId);
+    await ensureHeaders();
+    return;
+  }
+
+  // Crea nuovo se non esiste
+  console.log("File non trovato. Creazione nuovo foglio di calcolo...");
+  const cr = await gFetch('https://sheets.googleapis.com/v4/spreadsheets', {
+    method: 'POST',
+    body: JSON.stringify({
+      properties: { title: FILE_NAME, locale: 'it_IT' },
+      sheets: [{ properties: { title: 'Rilevamenti', sheetId: 0 } }],
+    }),
+  });
+  S.sheetId = cr.spreadsheetId;
+  sessionStorage.setItem('ms_sid', S.sheetId);
+
+  // Inserimento Header
+  await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A1:F1?valueInputOption=RAW`,
+    { method:'PUT', body: JSON.stringify({ values:[HEADERS] }) });
+
+  // Formattazione
   await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}:batchUpdate`, {
     method: 'POST',
     body: JSON.stringify({ requests:[
@@ -639,7 +936,7 @@ function renderHome() {
         <div class="hero-sub">Bentornata, ${name} 👋</div>
         <div class="hero-week">Settimana ${last.settimana}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-          <span class="pill" style="background:rgba(255,255,255,.2);color:#fff">${fmtPeso(last.peso)} kg</span>
+          <span class="pill" style="background:rgba(255,255,255,.2);color:#fff">${last.peso} kg</span>
           <span class="pill" style="background:rgba(255,255,255,.2);color:#fff">${last.sistolica}/${last.diastolica} mmHg</span>
         </div>
         <p style="color:rgba(255,255,255,.6);font-size:12px">Ultimo: ${fmtDate(last.date)}</p>
@@ -648,7 +945,7 @@ function renderHome() {
       <div class="stat-row">
         <div class="stat-card">
           <div class="stat-lbl">Peso</div>
-          <div class="stat-val" style="color:var(--mauve-dk)">${fmtPeso(last.peso)}<span class="stat-unit"> kg</span></div>
+          <div class="stat-val" style="color:var(--mauve-dk)">${last.peso}<span class="stat-unit"> kg</span></div>
           <div class="stat-sub">${dP!==null?(+dP>0?'+':'')+dP+' kg dalla scorsa':'Primo rilevamento'}</div>
         </div>
         <div class="stat-card">
@@ -668,7 +965,7 @@ function renderHome() {
             <span class="dy">${dayNum(r.date)}</span>
           </div>
           <div style="flex:1">
-            <div style="font-size:13px;font-weight:700;color:var(--ink)">${fmtPeso(r.peso)} kg &nbsp;·&nbsp; <span style="color:var(--sage-dk)">${r.sistolica}/${r.diastolica} mmHg</span></div>
+            <div style="font-size:13px;font-weight:700;color:var(--ink)">${r.peso} kg &nbsp;·&nbsp; <span style="color:var(--sage-dk)">${r.sistolica}/${r.diastolica} mmHg</span></div>
             <div style="font-size:11px;color:var(--muted)">Settimana ${r.settimana}${r.note?' · '+r.note:''}</div>
           </div>
         </div>`).join('');
@@ -714,7 +1011,7 @@ function renderAdd() {
       <div class="f-box-title" style="color:var(--mauve-dk)">⚖️ Peso corporeo</div>
       <div class="field" style="margin-bottom:0">
         <label class="f-label">Peso (kg)</label>
-        <input type="text" inputmode="decimal" class="f-input" id="f-peso" placeholder="es. 65,5" value="${f.peso}">
+        <input type="number" inputmode="decimal" step="0.1" class="f-input" id="f-peso" placeholder="es. 65.5" value="${f.peso}">
       </div>
     </div>
 
@@ -756,7 +1053,7 @@ function cancelAdd() {
 async function saveEntry() {
   if (S.saving) return;
   const date = document.getElementById('f-date')?.value;
-  const peso = parsePeso(document.getElementById('f-peso')?.value);
+  const peso = parseFloat(document.getElementById('f-peso')?.value);
   const sist = parseInt(document.getElementById('f-sist')?.value);
   const dias = parseInt(document.getElementById('f-dias')?.value);
   const note = document.getElementById('f-note')?.value?.trim() || '';
@@ -819,8 +1116,8 @@ function renderCharts() {
         <canvas id="c-peso" height="210"></canvas>
       </div>
       <div class="sum-grid">
-        <div class="sum-item"><div class="sum-lbl">Inizio</div><div class="sum-val" style="color:var(--mauve-dk)">${fmtPeso(first.peso)} kg</div></div>
-        <div class="sum-item"><div class="sum-lbl">Attuale</div><div class="sum-val" style="color:var(--mauve-dk)">${fmtPeso(last.peso)} kg</div></div>
+        <div class="sum-item"><div class="sum-lbl">Inizio</div><div class="sum-val" style="color:var(--mauve-dk)">${first.peso} kg</div></div>
+        <div class="sum-item"><div class="sum-lbl">Attuale</div><div class="sum-val" style="color:var(--mauve-dk)">${last.peso} kg</div></div>
         <div class="sum-item"><div class="sum-lbl">Variazione</div><div class="sum-val" style="color:var(--terra)">${+dP>0?'+':''}${dP} kg</div></div>
       </div>
     </div>
@@ -879,7 +1176,7 @@ function buildPesoChart(labels, vals) {
       borderWidth:2.5, tension:.35, fill:true,
       pointBackgroundColor:'#8D6B84', pointBorderColor:'#fff', pointBorderWidth:2, pointRadius:5,
     }]},
-    options:{ ...chartBase, plugins:{ ...chartBase.plugins, tooltip:{callbacks:{label:c=>fmtPeso(c.parsed.y)+' kg'}}},
+    options:{ ...chartBase, plugins:{ ...chartBase.plugins, tooltip:{callbacks:{label:c=>c.parsed.y+' kg'}}},
       scales:{ ...chartBase.scales, y:{ ...chartBase.scales.y, ticks:{...chartBase.scales.y.ticks, callback:v=>v+' kg'}}}},
   });
 }
@@ -924,7 +1221,7 @@ function renderHistory() {
           <span style="font-size:11px;font-weight:600;color:var(--muted)">Sett. ${r.settimana}</span>
           ${i===0?'<span class="pill" style="background:#C2A4B820;color:var(--mauve-dk)">Ultimo</span>':''}
         </div>
-        <div style="font-size:14px;font-weight:700;color:var(--ink)">${fmtPeso(r.peso)} kg <span style="color:var(--muted);font-weight:400">·</span> <span style="color:var(--sage-dk)">${r.sistolica}/${r.diastolica} mmHg</span></div>
+        <div style="font-size:14px;font-weight:700;color:var(--ink)">${r.peso} kg <span style="color:var(--muted);font-weight:400">·</span> <span style="color:var(--sage-dk)">${r.sistolica}/${r.diastolica} mmHg</span></div>
         ${r.note?`<div style="font-size:11px;color:var(--muted);margin-top:2px">📝 ${r.note}</div>`:''}
       </div>
       <button class="del-btn" onclick="askDelete('${r.date}','${fmtDate(r.date)}')">🗑</button>
