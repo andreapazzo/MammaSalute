@@ -316,7 +316,7 @@ const CLIENT_ID = '515219225709-50f4b06varb5b7ld8q453j6qffevs27l.apps.googleuser
 
 const SCOPES    = 'openid email profile https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 const FILE_NAME = 'MammaSalute - Monitoraggio Gravidanza';
-const HEADERS   = ['Data','Settimana','Peso (kg)','Sistolica (mmHg)','Diastolica (mmHg)','Note'];
+const HEADERS   = ['Data','Settimana','Peso (kg)','Sistolica (mmHg)','Diastolica (mmHg)','Note','ID'];
 
 // ── State ───────────────────────────────────────────────────────
 const S = {
@@ -648,14 +648,14 @@ async function findOrCreateOLD() {
   sessionStorage.setItem('ms_sid', S.sheetId);
 
   // Header row + format
-  await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A1:F1?valueInputOption=RAW`,
+  await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A1:G1?valueInputOption=RAW`,
     { method:'PUT', body: JSON.stringify({ values:[HEADERS] }) });
 
   await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}:batchUpdate`, {
     method: 'POST',
     body: JSON.stringify({ requests:[
       { repeatCell:{
-          range:{ sheetId:0, startRowIndex:0, endRowIndex:1, startColumnIndex:0, endColumnIndex:6 },
+          range:{ sheetId:0, startRowIndex:0, endRowIndex:1, startColumnIndex:0, endColumnIndex:7 },
           cell:{ userEnteredFormat:{
             backgroundColor:{ red:.757, green:.643, blue:.722 },
             textFormat:{ bold:true, foregroundColor:{ red:1,green:1,blue:1 } },
@@ -671,6 +671,11 @@ async function findOrCreateOLD() {
           range:{ sheetId:0, dimension:'COLUMNS', startIndex:0, endIndex:6 },
           properties:{ pixelSize:130 },
           fields:'pixelSize',
+      }},
+      { updateDimensionProperties:{
+          range:{ sheetId:0, dimension:'COLUMNS', startIndex:6, endIndex:7 },
+          properties:{ hiddenByUser:true },
+          fields:'hiddenByUser',
       }},
     ]})
   });
@@ -773,7 +778,7 @@ async function findOrCreate() {
   sessionStorage.setItem('ms_sid', S.sheetId);
 
   // Inserimento Header
-  await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A1:F1?valueInputOption=RAW`,
+  await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A1:G1?valueInputOption=RAW`,
     { method:'PUT', body: JSON.stringify({ values:[HEADERS] }) });
 
   // Formattazione
@@ -781,7 +786,7 @@ async function findOrCreate() {
     method: 'POST',
     body: JSON.stringify({ requests:[
       { repeatCell:{
-          range:{ sheetId:0, startRowIndex:0, endRowIndex:1, startColumnIndex:0, endColumnIndex:6 },
+          range:{ sheetId:0, startRowIndex:0, endRowIndex:1, startColumnIndex:0, endColumnIndex:7 },
           cell:{ userEnteredFormat:{
             backgroundColor:{ red:.757, green:.643, blue:.722 },
             textFormat:{ bold:true, foregroundColor:{ red:1,green:1,blue:1 } },
@@ -798,43 +803,85 @@ async function findOrCreate() {
           properties:{ pixelSize:130 },
           fields:'pixelSize',
       }},
+      { updateDimensionProperties:{
+          range:{ sheetId:0, dimension:'COLUMNS', startIndex:6, endIndex:7 },
+          properties:{ hiddenByUser:true },
+          fields:'hiddenByUser',
+      }},
     ]})
   });
 }
 
 async function ensureHeaders() {
   try {
-    const r = await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A1:F1`);
+    const r = await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A1:G1`);
     if (!r.values?.length) {
-      await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A1:F1?valueInputOption=RAW`,
+      await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A1:G1?valueInputOption=RAW`,
         { method:'PUT', body:JSON.stringify({ values:[HEADERS] }) });
+    } else if (r.values[0].length < 7) {
+      // Foglio esistente creato prima dell'introduzione della colonna ID: la aggiunge
+      await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!G1?valueInputOption=RAW`,
+        { method:'PUT', body:JSON.stringify({ values:[['ID']] }) });
     }
   } catch(e){}
 }
 
 async function loadData() {
-  const r = await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A2:F2000`);
+  const r = await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A2:G2000`);
+  let needsBackfill = false;
   S.data = (r.values || [])
     .filter(row => row[0] && row[2])
-    .map(row => ({
-      date: row[0], settimana: +row[1]||0,
-      peso: parseFloat(row[2])||0, sistolica: +row[3]||0, diastolica: +row[4]||0,
-      note: row[5]||'',
-    }))
+    .map((row, i) => {
+      if (!row[6]) needsBackfill = true;
+      return {
+        rowId: row[6] || null,
+        rowIndex: i,           // posizione 0-based fra le righe dati, usata per il backfill
+        date: row[0], settimana: +row[1]||0,
+        peso: parsePeso(row[2])||0, sistolica: +row[3]||0, diastolica: +row[4]||0,
+        note: row[5]||'',
+      };
+    })
     .sort((a,b) => a.date.localeCompare(b.date));
+  if (needsBackfill) await backfillRowIds();
+}
+
+// Assegna un ID univoco alle righe storiche che ne sono prive (dati salvati
+// prima dell'introduzione della colonna ID), così anche loro diventano
+// identificabili in modo univoco per l'eliminazione.
+async function backfillRowIds() {
+  const updates = S.data
+    .filter(r => !r.rowId)
+    .map(r => {
+      const id = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+      r.rowId = id;
+      return { range: `Rilevamenti!G${r.rowIndex + 2}`, values: [[id]] };
+    });
+  if (!updates.length) return;
+  try {
+    await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values:batchUpdate`, {
+      method:'POST',
+      body: JSON.stringify({ valueInputOption:'RAW', data: updates }),
+    });
+  } catch(e) { console.warn('Backfill ID fallito:', e.message); }
+}
+
+function newRowId() {
+  return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 }
 
 async function appendEntry(e) {
+  const rowId = newRowId();
   await gFetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A:F:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-    { method:'POST', body:JSON.stringify({ values:[[e.date, e.settimana, e.peso, e.sistolica, e.diastolica, e.note]] }) }
+    `https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A:G:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { method:'POST', body:JSON.stringify({ values:[[e.date, e.settimana, e.peso, e.sistolica, e.diastolica, e.note, rowId]] }) }
   );
+  return rowId;
 }
 
-async function deleteEntry(date) {
-  const r = await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!A:A`);
+async function deleteEntry(rowId) {
+  const r = await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}/values/Rilevamenti!G:G`);
   const rows = r.values||[];
-  const idx  = rows.findIndex((row,i) => i>0 && row[0]===date);
+  const idx  = rows.findIndex((row,i) => i>0 && row[0]===rowId);
   if (idx<0) return;
   await gFetch(`https://sheets.googleapis.com/v4/spreadsheets/${S.sheetId}:batchUpdate`, {
     method:'POST',
@@ -1071,9 +1118,9 @@ async function saveEntry() {
 
   try {
     const entry = { date, settimana: S.form.settimana, peso, sistolica:sist, diastolica:dias, note };
-    await appendEntry(entry);
+    entry.rowId = await appendEntry(entry);
     S.data.push(entry);
-    S.data.sort((a,b)=>a.date.localeCompare(b.date));
+    S.data.sort((a,b)=> a.date===b.date ? 0 : a.date.localeCompare(b.date));
     S.form = freshForm();
     S.form.settimana = Math.min(42, entry.settimana + 1);
     toast('✓ Salvato su Google Sheets!','ok');
@@ -1226,7 +1273,7 @@ function renderHistory() {
         <div style="font-size:14px;font-weight:700;color:var(--ink)">${fmtPeso(r.peso)} kg <span style="color:var(--muted);font-weight:400">·</span> <span style="color:var(--sage-dk)">${r.sistolica}/${r.diastolica} mmHg</span></div>
         ${r.note?`<div style="font-size:11px;color:var(--muted);margin-top:2px">📝 ${r.note}</div>`:''}
       </div>
-      <button class="del-btn" onclick="askDelete('${r.date}','${fmtDate(r.date)}')">🗑</button>
+      <button class="del-btn" onclick="askDelete('${r.rowId}','${fmtDate(r.date)}')">🗑</button>
     </div>`).join('');
 
   html('content', `
@@ -1241,16 +1288,16 @@ function renderHistory() {
     <div style="height:10px"></div>`);
 }
 
-function askDelete(date, label) {
+function askDelete(rowId, label) {
   if (!confirm(`Eliminare il rilevamento del ${label}?`)) return;
-  doDelete(date);
+  doDelete(rowId);
 }
 
-async function doDelete(date) {
+async function doDelete(rowId) {
   toast('Eliminazione…');
   try {
-    await deleteEntry(date);
-    S.data = S.data.filter(r => r.date !== date);
+    await deleteEntry(rowId);
+    S.data = S.data.filter(r => r.rowId !== rowId);
     toast('Eliminato','ok');
     renderHistory();
   } catch(e) {
