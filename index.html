@@ -349,6 +349,8 @@ function monthStr(d) {
   return new Date(d + 'T00:00:00').toLocaleDateString('it-IT', { month:'short' });
 }
 function dayNum(d) { return new Date(d + 'T00:00:00').getDate(); }
+function fmtPeso(v) { return Number(v).toFixed(1).replace('.', ','); }
+function parsePeso(v) { return parseFloat(String(v).replace(',', '.')); }
 
 function toast(msg, type='') {
   const el = document.getElementById('toast');
@@ -936,7 +938,7 @@ function renderHome() {
         <div class="hero-sub">Bentornata, ${name} 👋</div>
         <div class="hero-week">Settimana ${last.settimana}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-          <span class="pill" style="background:rgba(255,255,255,.2);color:#fff">${last.peso} kg</span>
+          <span class="pill" style="background:rgba(255,255,255,.2);color:#fff">${fmtPeso(last.peso)} kg</span>
           <span class="pill" style="background:rgba(255,255,255,.2);color:#fff">${last.sistolica}/${last.diastolica} mmHg</span>
         </div>
         <p style="color:rgba(255,255,255,.6);font-size:12px">Ultimo: ${fmtDate(last.date)}</p>
@@ -945,7 +947,7 @@ function renderHome() {
       <div class="stat-row">
         <div class="stat-card">
           <div class="stat-lbl">Peso</div>
-          <div class="stat-val" style="color:var(--mauve-dk)">${last.peso}<span class="stat-unit"> kg</span></div>
+          <div class="stat-val" style="color:var(--mauve-dk)">${fmtPeso(last.peso)}<span class="stat-unit"> kg</span></div>
           <div class="stat-sub">${dP!==null?(+dP>0?'+':'')+dP+' kg dalla scorsa':'Primo rilevamento'}</div>
         </div>
         <div class="stat-card">
@@ -965,7 +967,7 @@ function renderHome() {
             <span class="dy">${dayNum(r.date)}</span>
           </div>
           <div style="flex:1">
-            <div style="font-size:13px;font-weight:700;color:var(--ink)">${r.peso} kg &nbsp;·&nbsp; <span style="color:var(--sage-dk)">${r.sistolica}/${r.diastolica} mmHg</span></div>
+            <div style="font-size:13px;font-weight:700;color:var(--ink)">${fmtPeso(r.peso)} kg &nbsp;·&nbsp; <span style="color:var(--sage-dk)">${r.sistolica}/${r.diastolica} mmHg</span></div>
             <div style="font-size:11px;color:var(--muted)">Settimana ${r.settimana}${r.note?' · '+r.note:''}</div>
           </div>
         </div>`).join('');
@@ -1011,7 +1013,7 @@ function renderAdd() {
       <div class="f-box-title" style="color:var(--mauve-dk)">⚖️ Peso corporeo</div>
       <div class="field" style="margin-bottom:0">
         <label class="f-label">Peso (kg)</label>
-        <input type="number" inputmode="decimal" step="0.1" class="f-input" id="f-peso" placeholder="es. 65.5" value="${f.peso}">
+        <input type="text" inputmode="decimal" class="f-input" id="f-peso" placeholder="es. 65,5" value="${f.peso}">
       </div>
     </div>
 
@@ -1053,7 +1055,7 @@ function cancelAdd() {
 async function saveEntry() {
   if (S.saving) return;
   const date = document.getElementById('f-date')?.value;
-  const peso = parseFloat(document.getElementById('f-peso')?.value);
+  const peso = parsePeso(document.getElementById('f-peso')?.value);
   const sist = parseInt(document.getElementById('f-sist')?.value);
   const dias = parseInt(document.getElementById('f-dias')?.value);
   const note = document.getElementById('f-note')?.value?.trim() || '';
@@ -1116,8 +1118,8 @@ function renderCharts() {
         <canvas id="c-peso" height="210"></canvas>
       </div>
       <div class="sum-grid">
-        <div class="sum-item"><div class="sum-lbl">Inizio</div><div class="sum-val" style="color:var(--mauve-dk)">${first.peso} kg</div></div>
-        <div class="sum-item"><div class="sum-lbl">Attuale</div><div class="sum-val" style="color:var(--mauve-dk)">${last.peso} kg</div></div>
+        <div class="sum-item"><div class="sum-lbl">Inizio</div><div class="sum-val" style="color:var(--mauve-dk)">${fmtPeso(first.peso)} kg</div></div>
+        <div class="sum-item"><div class="sum-lbl">Attuale</div><div class="sum-val" style="color:var(--mauve-dk)">${fmtPeso(last.peso)} kg</div></div>
         <div class="sum-item"><div class="sum-lbl">Variazione</div><div class="sum-val" style="color:var(--terra)">${+dP>0?'+':''}${dP} kg</div></div>
       </div>
     </div>
@@ -1176,7 +1178,7 @@ function buildPesoChart(labels, vals) {
       borderWidth:2.5, tension:.35, fill:true,
       pointBackgroundColor:'#8D6B84', pointBorderColor:'#fff', pointBorderWidth:2, pointRadius:5,
     }]},
-    options:{ ...chartBase, plugins:{ ...chartBase.plugins, tooltip:{callbacks:{label:c=>c.parsed.y+' kg'}}},
+    options:{ ...chartBase, plugins:{ ...chartBase.plugins, tooltip:{callbacks:{label:c=>fmtPeso(c.parsed.y)+' kg'}}},
       scales:{ ...chartBase.scales, y:{ ...chartBase.scales.y, ticks:{...chartBase.scales.y.ticks, callback:v=>v+' kg'}}}},
   });
 }
@@ -1221,7 +1223,7 @@ function renderHistory() {
           <span style="font-size:11px;font-weight:600;color:var(--muted)">Sett. ${r.settimana}</span>
           ${i===0?'<span class="pill" style="background:#C2A4B820;color:var(--mauve-dk)">Ultimo</span>':''}
         </div>
-        <div style="font-size:14px;font-weight:700;color:var(--ink)">${r.peso} kg <span style="color:var(--muted);font-weight:400">·</span> <span style="color:var(--sage-dk)">${r.sistolica}/${r.diastolica} mmHg</span></div>
+        <div style="font-size:14px;font-weight:700;color:var(--ink)">${fmtPeso(r.peso)} kg <span style="color:var(--muted);font-weight:400">·</span> <span style="color:var(--sage-dk)">${r.sistolica}/${r.diastolica} mmHg</span></div>
         ${r.note?`<div style="font-size:11px;color:var(--muted);margin-top:2px">📝 ${r.note}</div>`:''}
       </div>
       <button class="del-btn" onclick="askDelete('${r.date}','${fmtDate(r.date)}')">🗑</button>
